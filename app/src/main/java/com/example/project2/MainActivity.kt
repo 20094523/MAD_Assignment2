@@ -21,16 +21,22 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.project2.ui.theme.MAD_Assignment2Theme
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.res.imageResource
+import coil.compose.AsyncImage
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 
-data class Item(val name: String, val amount: Int)
-
+data class Grocery(val name: String, val amount: Int, val imageUri: String?)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             MAD_Assignment2Theme {
                 val navController = rememberNavController()
-                val itemList = remember { mutableStateListOf<Item>() }  // Correctly typed
+                val itemList = remember { mutableStateListOf<Grocery>() }  // Correctly typed
                 AppNavHost(navController = navController, itemList = itemList)
             }
         }
@@ -40,7 +46,7 @@ class MainActivity : ComponentActivity() {
 //main controller. NavHost for both views.
 
 @Composable
-fun AppNavHost(navController: NavHostController, itemList: MutableList<Item>) {
+fun AppNavHost(navController: NavHostController, itemList: MutableList<Grocery>) {
     NavHost(navController = navController, startDestination = "main_screen") {
         composable("main_screen") {
             MainScreen(navController = navController, itemList = itemList)
@@ -48,13 +54,17 @@ fun AppNavHost(navController: NavHostController, itemList: MutableList<Item>) {
         composable("add_item_screen") {
             AddItemScreen(navController = navController, itemList = itemList)
         }
+        composable("edit_item_screen/{itemIndex}") { backStackEntry ->
+            val itemIndex = backStackEntry.arguments?.getString("itemIndex")?.toInt() ?: 0
+            EditItemScreen(navController = navController, itemList = itemList, itemIndex = itemIndex)
+        }
     }
 }
 @Composable
 
 //view 1. Items Displayed in a list.
 
-fun MainScreen(navController: NavHostController, itemList: List<Item>) {
+fun MainScreen(navController: NavHostController, itemList: MutableList<Grocery>) {
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(onClick = { navController.navigate("add_item_screen") }) {
@@ -66,14 +76,52 @@ fun MainScreen(navController: NavHostController, itemList: List<Item>) {
             if (itemList.isEmpty()) {
                 Text("No items available", style = MaterialTheme.typography.bodyLarge)
             } else {
-                itemList.forEach { item ->
+                itemList.forEachIndexed { index, grocery ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp)
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(item.name, modifier = Modifier.weight(1f))
-                        Text(item.amount.toString(), modifier = Modifier.weight(1f))
+                        // Display the image if available
+                        if (grocery.imageUri != null) {
+                            AsyncImage(
+                                model = grocery.imageUri,
+                                contentDescription = "Item Image",
+                                modifier = Modifier.weight(1f).padding(8.dp)
+                            )
+                        } else {
+                            Image(
+                                bitmap = ImageBitmap.imageResource(R.drawable.placeholder),
+                                contentDescription = "Placeholder",
+                                modifier = Modifier.weight(1f).padding(8.dp)
+                            )
+                        }
+
+                        Column(modifier = Modifier.weight(2f)) {
+                            Text(grocery.name)
+                            Text(grocery.amount.toString())
+                        }
+
+                        // Edit Button
+                        Button(
+                            onClick = {
+                                navController.navigate("edit_item_screen/$index")
+                            },
+                            modifier = Modifier.padding(start = 8.dp)
+                        ) {
+                            Text("Edit")
+                        }
+
+                        // Delete Button
+                        Button(
+                            onClick = {
+                                itemList.removeAt(index)
+                            },
+                            modifier = Modifier.padding(start = 8.dp)
+                        ) {
+                            Text("Delete")
+                        }
                     }
                 }
             }
@@ -85,16 +133,22 @@ fun MainScreen(navController: NavHostController, itemList: List<Item>) {
 
 //View 2. Adding to list
 
-fun AddItemScreen(navController: NavHostController, itemList: MutableList<Item>) {
-    //start off empty
+fun AddItemScreen(navController: NavHostController, itemList: MutableList<Grocery>) {
     var name by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
+    var imageUri by remember { mutableStateOf<Uri?>(null) }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        imageUri = uri
+    }
 
     Column(modifier = Modifier.padding(16.dp)) {
         TextField(
             value = name,
             onValueChange = { name = it },
-            label = { Text("Enter Grocery") },
+            label = { Text("Enter Name") },
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -106,12 +160,20 @@ fun AddItemScreen(navController: NavHostController, itemList: MutableList<Item>)
             modifier = Modifier.fillMaxWidth()
         )
 
+        Button(onClick = { imagePickerLauncher.launch("image/*") }) {
+            Text("Pick Image")
+        }
+
+        imageUri?.let {
+            AsyncImage(model = it, contentDescription = null, modifier = Modifier.fillMaxWidth())
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(
             onClick = {
                 if (name.isNotBlank() && amount.isNotBlank()) {
-                    itemList.add(Item(name, amount.toInt()))
+                    itemList.add(Grocery(name, amount.toInt(), imageUri.toString()))
                     navController.popBackStack()
                 }
             },
@@ -121,3 +183,55 @@ fun AddItemScreen(navController: NavHostController, itemList: MutableList<Item>)
         }
     }
 }
+
+    @Composable
+    fun EditItemScreen(navController: NavHostController, itemList: MutableList<Grocery>, itemIndex: Int) {
+        var name by remember { mutableStateOf(itemList[itemIndex].name) }
+        var amount by remember { mutableStateOf(itemList[itemIndex].amount.toString()) }
+        var imageUri by remember { mutableStateOf<Uri?>(Uri.parse(itemList[itemIndex].imageUri)) }
+
+        val imagePickerLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.GetContent()
+        ) { uri: Uri? ->
+            imageUri = uri
+        }
+
+        Column(modifier = Modifier.padding(16.dp)) {
+            TextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Enter Name") },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            TextField(
+                value = amount,
+                onValueChange = { amount = it },
+                label = { Text("Enter Amount") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Button(onClick = { imagePickerLauncher.launch("image/*") }) {
+                Text("Pick Image")
+            }
+
+            imageUri?.let {
+                AsyncImage(model = it, contentDescription = null, modifier = Modifier.fillMaxWidth())
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(
+                onClick = {
+                    if (name.isNotBlank() && amount.isNotBlank()) {
+                        itemList[itemIndex] = Grocery(name, amount.toInt(), imageUri.toString())
+                        navController.popBackStack()
+                    }
+                },
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text("Save")
+            }
+        }
+    }
