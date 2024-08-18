@@ -29,12 +29,29 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.livedata.observeAsState
+import com.example.project2.data.Grocery
+import com.example.project2.data.GroceryDao
+import com.example.project2.data.GroceryDatabase
+import com.example.project2.data.GroceryRepository
+import com.example.project2.data.GroceryViewModel
 
-data class Grocery(val name: String, val amount: Int, val imageUri: String?)
 
-
+//main activity initializes all of the components for the database and
+//invokes navController, view-model etc. Initializes the whole app
 class MainActivity : ComponentActivity() {
-    private val groceryViewModel: GroceryViewModel by viewModels() // Get ViewModel instance
+
+    private val groceryDao: GroceryDao by lazy {
+        GroceryDatabase.getDatabase(application).groceryDao()
+    }
+
+    private val groceryRepository: GroceryRepository by lazy {
+        GroceryRepository(groceryDao)
+    }
+
+    private val groceryViewModel: GroceryViewModel by viewModels {
+        GroceryViewModelFactory(groceryRepository)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,6 +64,10 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+//Reused Composable I saw on the marking scheme. Used for AddItemScreen and EditItemScreen
+//Consists of a form, image picker and data validation making sure the button
+//doesn't show up until all three variables have been filled.
+
 @SuppressLint("UnrememberedMutableState")
 @Composable
 fun GroceryForm(
@@ -55,7 +76,7 @@ fun GroceryForm(
     initialImageUri: Uri?,
     onSubmit: (String, String, Uri?) -> Unit,
     onImagePicked: (Uri?) -> Unit,
-    modifier: Modifier = Modifier // Default value added
+    modifier: Modifier = Modifier
 ) {
     var name by remember { mutableStateOf(initialName) }
     var amount by remember { mutableStateOf(initialAmount) }
@@ -72,7 +93,7 @@ fun GroceryForm(
         name.isNotBlank() && amount.isNotBlank() && imageUri != null
     }
 
-    Column(modifier = modifier.padding(16.dp)) { // Apply modifier here
+    Column(modifier = modifier.padding(16.dp)) {
         TextField(
             value = name,
             onValueChange = { name = it },
@@ -105,14 +126,13 @@ fun GroceryForm(
                 }
             },
             modifier = Modifier.align(Alignment.End),
-            enabled = isSubmitEnabled // Disable button if validation fails
+            enabled = isSubmitEnabled
         ) {
             Text("Submit")
         }
     }
 }
 
-// Function to get the background color based on orientation
 @Composable
 fun BackgroundColorModifier(content: @Composable (Modifier) -> Unit) {
     val configuration = LocalConfiguration.current
@@ -129,28 +149,55 @@ fun BackgroundColorModifier(content: @Composable (Modifier) -> Unit) {
 
 @Composable
 fun AppNavHost(navController: NavHostController, groceryViewModel: GroceryViewModel) {
+    val itemList by groceryViewModel.allGroceries.observeAsState(emptyList())
+
     NavHost(navController = navController, startDestination = "main_screen") {
         composable("main_screen") {
             BackgroundColorModifier { modifier ->
-                MainScreen(navController = navController, itemList = groceryViewModel.itemList, modifier = modifier)
+                MainScreen(
+                    navController = navController,
+                    itemList = itemList,
+                    groceryViewModel = groceryViewModel,
+                    modifier = modifier
+                )
             }
         }
         composable("add_item_screen") {
             BackgroundColorModifier { modifier ->
-                AddItemScreen(navController = navController, itemList = groceryViewModel.itemList, modifier = modifier)
+                AddItemScreen(
+                    navController = navController,
+                    onItemAdded = { name, amount, imageUri ->
+                        groceryViewModel.insert(Grocery(name = name, amount = amount.toInt(), imageUri = imageUri))
+                        navController.popBackStack()
+                    },
+                    modifier = modifier
+                )
             }
         }
         composable("edit_item_screen/{itemIndex}") { backStackEntry ->
             val itemIndex = backStackEntry.arguments?.getString("itemIndex")?.toInt() ?: 0
             BackgroundColorModifier { modifier ->
-                EditItemScreen(navController = navController, itemList = groceryViewModel.itemList, itemIndex = itemIndex, modifier = modifier)
+                EditItemScreen(
+                    navController = navController,
+                    itemList = itemList, // Pass itemList here
+                    itemIndex = itemIndex,
+                    onItemUpdated = { name, amount, imageUri -> // Ensure onItemUpdated is provided
+                        groceryViewModel.update(Grocery(name = name, amount = amount.toInt(), imageUri = imageUri))
+                        navController.popBackStack()
+                    },
+                    modifier = modifier
+                )
             }
         }
     }
 }
 
+//main screen of the app, lists all of the items. uses navController
+//on + button to move to different view. columns and rows created to list
+// each item in the itemList. buttons beside each item with edit and delete. CRUD.
+// invoke GroceryViewModel.
 @Composable
-fun MainScreen(navController: NavHostController, itemList: MutableList<Grocery>, modifier: Modifier) {
+fun MainScreen(navController: NavHostController, itemList: List<Grocery>, groceryViewModel: GroceryViewModel, modifier: Modifier) {
     Scaffold(
         modifier = modifier,
         floatingActionButton = {
@@ -170,7 +217,6 @@ fun MainScreen(navController: NavHostController, itemList: MutableList<Grocery>,
                             .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Display the image if available
                         if (grocery.imageUri != null) {
                             AsyncImage(
                                 model = grocery.imageUri,
@@ -189,8 +235,6 @@ fun MainScreen(navController: NavHostController, itemList: MutableList<Grocery>,
                             Text(grocery.name)
                             Text(grocery.amount.toString())
                         }
-
-                        // Edit Button
                         Button(
                             onClick = {
                                 navController.navigate("edit_item_screen/$index")
@@ -199,11 +243,9 @@ fun MainScreen(navController: NavHostController, itemList: MutableList<Grocery>,
                         ) {
                             Text("Edit")
                         }
-
-                        // Delete Button
                         Button(
                             onClick = {
-                                itemList.removeAt(index)
+                                groceryViewModel.delete(grocery)
                             },
                             modifier = Modifier.padding(start = 8.dp)
                         ) {
@@ -216,34 +258,50 @@ fun MainScreen(navController: NavHostController, itemList: MutableList<Grocery>,
     }
 }
 
+// add item, reuses composable, has a form, data validation done before in
+// the reusable's declaration.
 @Composable
-fun AddItemScreen(navController: NavHostController, itemList: MutableList<Grocery>, modifier: Modifier) {
+fun AddItemScreen(
+    navController: NavHostController,
+    onItemAdded: (String, Int, String?) -> Unit,
+    modifier: Modifier
+) {
+    var name by remember { mutableStateOf("") }
+    var amount by remember { mutableStateOf("") }
+    var imageUri by remember { mutableStateOf<String?>(null) }
+
     GroceryForm(
-        initialName = "",
-        initialAmount = "",
-        initialImageUri = null,
+        initialName = name,
+        initialAmount = amount,
+        initialImageUri = imageUri?.let { Uri.parse(it) },
         onSubmit = { name, amount, imageUri ->
-            itemList.add(Grocery(name, amount.toInt(), imageUri?.toString()))
-            navController.popBackStack()
+            onItemAdded(name, amount.toInt(), imageUri?.toString())
         },
-        onImagePicked = { imageUri -> },
+        onImagePicked = { uri -> imageUri = uri?.toString() },
         modifier = modifier
     )
 }
 
+
+//reuses composable. edit item similar to add item
 @Composable
-fun EditItemScreen(navController: NavHostController, itemList: MutableList<Grocery>, itemIndex: Int, modifier: Modifier) {
-    val grocery = itemList[itemIndex]
+fun EditItemScreen(
+    navController: NavHostController,
+    itemList: List<Grocery>,
+    itemIndex: Int,
+    onItemUpdated: (String, Int, String?) -> Unit,
+    modifier: Modifier
+) {
+    val grocery = itemList.getOrNull(itemIndex) ?: return
 
     GroceryForm(
         initialName = grocery.name,
         initialAmount = grocery.amount.toString(),
         initialImageUri = Uri.parse(grocery.imageUri),
         onSubmit = { name, amount, imageUri ->
-            itemList[itemIndex] = Grocery(name, amount.toInt(), imageUri?.toString())
-            navController.popBackStack()
+            onItemUpdated(name, amount.toInt(), imageUri?.toString())
         },
-        onImagePicked = { imageUri -> },
+        onImagePicked = {},
         modifier = modifier
     )
 }
