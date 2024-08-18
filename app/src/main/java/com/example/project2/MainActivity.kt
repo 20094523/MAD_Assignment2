@@ -27,17 +27,21 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.activity.viewModels
+import androidx.compose.runtime.Composable
 
 data class Grocery(val name: String, val amount: Int, val imageUri: String?)
 
+
 class MainActivity : ComponentActivity() {
+    private val groceryViewModel: GroceryViewModel by viewModels() // Get ViewModel instance
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             MAD_Assignment2Theme {
                 val navController = rememberNavController()
-                val itemList = remember { mutableStateListOf<Grocery>() }
-                AppNavHost(navController = navController, itemList = itemList)
+                AppNavHost(navController = navController, groceryViewModel = groceryViewModel)
             }
         }
     }
@@ -124,22 +128,22 @@ fun BackgroundColorModifier(content: @Composable (Modifier) -> Unit) {
 }
 
 @Composable
-fun AppNavHost(navController: NavHostController, itemList: MutableList<Grocery>) {
+fun AppNavHost(navController: NavHostController, groceryViewModel: GroceryViewModel) {
     NavHost(navController = navController, startDestination = "main_screen") {
         composable("main_screen") {
             BackgroundColorModifier { modifier ->
-                MainScreen(navController = navController, itemList = itemList, modifier = modifier)
+                MainScreen(navController = navController, itemList = groceryViewModel.itemList, modifier = modifier)
             }
         }
         composable("add_item_screen") {
             BackgroundColorModifier { modifier ->
-                AddItemScreen(navController = navController, itemList = itemList, modifier = modifier)
+                AddItemScreen(navController = navController, itemList = groceryViewModel.itemList, modifier = modifier)
             }
         }
         composable("edit_item_screen/{itemIndex}") { backStackEntry ->
             val itemIndex = backStackEntry.arguments?.getString("itemIndex")?.toInt() ?: 0
             BackgroundColorModifier { modifier ->
-                EditItemScreen(navController = navController, itemList = itemList, itemIndex = itemIndex, modifier = modifier)
+                EditItemScreen(navController = navController, itemList = groceryViewModel.itemList, itemIndex = itemIndex, modifier = modifier)
             }
         }
     }
