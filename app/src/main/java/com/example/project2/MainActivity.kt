@@ -28,6 +28,7 @@ import coil.compose.AsyncImage
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.fillMaxSize
 
 data class Grocery(val name: String, val amount: Int, val imageUri: String?)
 class MainActivity : ComponentActivity() {
@@ -36,7 +37,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             MAD_Assignment2Theme {
                 val navController = rememberNavController()
-                val itemList = remember { mutableStateListOf<Grocery>() }  // Correctly typed
+                val itemList = remember { mutableStateListOf<Grocery>() }
                 AppNavHost(navController = navController, itemList = itemList)
             }
         }
@@ -184,54 +185,60 @@ fun AddItemScreen(navController: NavHostController, itemList: MutableList<Grocer
     }
 }
 
-    @Composable
-    fun EditItemScreen(navController: NavHostController, itemList: MutableList<Grocery>, itemIndex: Int) {
-        var name by remember { mutableStateOf(itemList[itemIndex].name) }
-        var amount by remember { mutableStateOf(itemList[itemIndex].amount.toString()) }
-        var imageUri by remember { mutableStateOf<Uri?>(Uri.parse(itemList[itemIndex].imageUri)) }
 
-        val imagePickerLauncher = rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.GetContent()
-        ) { uri: Uri? ->
-            imageUri = uri
+//view 3, editing item
+@Composable
+fun EditItemScreen(navController: NavHostController, itemList: MutableList<Grocery>, itemIndex: Int) {
+    var name by remember { mutableStateOf(itemList[itemIndex].name) }
+    var amount by remember { mutableStateOf(itemList[itemIndex].amount.toString()) }
+    var imageUri by remember { mutableStateOf<Uri?>(Uri.parse(itemList[itemIndex].imageUri)) }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        imageUri = uri
+    }
+
+    Column(modifier = Modifier
+        .padding(16.dp)
+        .fillMaxSize()
+    ) {
+        // Content goes here
+        TextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("Enter Name") },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        TextField(
+            value = amount,
+            onValueChange = { amount = it },
+            label = { Text("Enter Amount") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Button(onClick = { imagePickerLauncher.launch("image/*") }) {
+            Text("Pick Image")
         }
 
-        Column(modifier = Modifier.padding(16.dp)) {
-            TextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("Enter Name") },
-                modifier = Modifier.fillMaxWidth()
-            )
+        imageUri?.let {
+            AsyncImage(model = it, contentDescription = null, modifier = Modifier.fillMaxWidth())
+        }
 
-            TextField(
-                value = amount,
-                onValueChange = { amount = it },
-                label = { Text("Enter Amount") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth()
-            )
+        Spacer(modifier = Modifier.weight(1f)) // This pushes the button to the bottom
 
-            Button(onClick = { imagePickerLauncher.launch("image/*") }) {
-                Text("Pick Image")
-            }
-
-            imageUri?.let {
-                AsyncImage(model = it, contentDescription = null, modifier = Modifier.fillMaxWidth())
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Button(
-                onClick = {
-                    if (name.isNotBlank() && amount.isNotBlank()) {
-                        itemList[itemIndex] = Grocery(name, amount.toInt(), imageUri.toString())
-                        navController.popBackStack()
-                    }
-                },
-                modifier = Modifier.align(Alignment.End)
-            ) {
-                Text("Save")
-            }
+        Button(
+            onClick = {
+                if (name.isNotBlank() && amount.isNotBlank()) {
+                    itemList[itemIndex] = Grocery(name, amount.toInt(), imageUri.toString())
+                    navController.popBackStack()
+                }
+            },
+            modifier = Modifier.align(Alignment.End)
+        ) {
+            Text("Save")
         }
     }
+}
