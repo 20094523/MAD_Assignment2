@@ -1,5 +1,6 @@
 package com.example.project2
 
+import android.annotation.SuppressLint
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -44,6 +45,70 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+
+@SuppressLint("UnrememberedMutableState")
+@Composable
+fun GroceryForm(
+    initialName: String,
+    initialAmount: String,
+    initialImageUri: Uri?,
+    onSubmit: (String, String, Uri?) -> Unit,
+    onImagePicked: (Uri?) -> Unit
+) {
+    var name by remember { mutableStateOf(initialName) }
+    var amount by remember { mutableStateOf(initialAmount) }
+    var imageUri by remember { mutableStateOf(initialImageUri) }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        imageUri = uri
+        onImagePicked(uri)
+    }
+
+    val isSubmitEnabled by derivedStateOf {
+        name.isNotBlank() && amount.isNotBlank() && imageUri != null
+    }
+
+    Column(modifier = Modifier.padding(16.dp)) {
+        TextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("Enter Name") },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        TextField(
+            value = amount,
+            onValueChange = { amount = it },
+            label = { Text("Enter Amount") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Button(onClick = { imagePickerLauncher.launch("image/*") }) {
+            Text("Pick Image")
+        }
+
+        imageUri?.let {
+            AsyncImage(model = it, contentDescription = null, modifier = Modifier.fillMaxWidth())
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = {
+                if (isSubmitEnabled) {
+                    onSubmit(name, amount, imageUri)
+                }
+            },
+            modifier = Modifier.align(Alignment.End),
+            enabled = isSubmitEnabled // Disable button if validation fails
+        ) {
+            Text("Submit")
+        }
+    }
+}
 //main controller. NavHost for both views.
 
 @Composable
@@ -133,112 +198,33 @@ fun MainScreen(navController: NavHostController, itemList: MutableList<Grocery>)
 @Composable
 
 //View 2. Adding to list
-
 fun AddItemScreen(navController: NavHostController, itemList: MutableList<Grocery>) {
-    var name by remember { mutableStateOf("") }
-    var amount by remember { mutableStateOf("") }
-    var imageUri by remember { mutableStateOf<Uri?>(null) }
-
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        imageUri = uri
-    }
-
-    Column(modifier = Modifier.padding(16.dp)) {
-        TextField(
-            value = name,
-            onValueChange = { name = it },
-            label = { Text("Enter Name") },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        TextField(
-            value = amount,
-            onValueChange = { amount = it },
-            label = { Text("Enter Amount") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Button(onClick = { imagePickerLauncher.launch("image/*") }) {
-            Text("Pick Image")
-        }
-
-        imageUri?.let {
-            AsyncImage(model = it, contentDescription = null, modifier = Modifier.fillMaxWidth())
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(
-            onClick = {
-                if (name.isNotBlank() && amount.isNotBlank()) {
-                    itemList.add(Grocery(name, amount.toInt(), imageUri.toString()))
-                    navController.popBackStack()
-                }
-            },
-            modifier = Modifier.align(Alignment.End)
-        ) {
-            Text("Add Item")
-        }
-    }
+    GroceryForm(
+        initialName = "",
+        initialAmount = "",
+        initialImageUri = null,
+        onSubmit = { name, amount, imageUri ->
+            itemList.add(Grocery(name, amount.toInt(), imageUri?.toString()))
+            navController.popBackStack()
+        },
+        onImagePicked = { imageUri -> }
+    )
 }
 
 
 //view 3, editing item
 @Composable
 fun EditItemScreen(navController: NavHostController, itemList: MutableList<Grocery>, itemIndex: Int) {
-    var name by remember { mutableStateOf(itemList[itemIndex].name) }
-    var amount by remember { mutableStateOf(itemList[itemIndex].amount.toString()) }
-    var imageUri by remember { mutableStateOf<Uri?>(Uri.parse(itemList[itemIndex].imageUri)) }
+    val grocery = itemList[itemIndex]
 
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        imageUri = uri
-    }
-
-    Column(modifier = Modifier
-        .padding(16.dp)
-        .fillMaxSize()
-    ) {
-        // Content goes here
-        TextField(
-            value = name,
-            onValueChange = { name = it },
-            label = { Text("Enter Name") },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        TextField(
-            value = amount,
-            onValueChange = { amount = it },
-            label = { Text("Enter Amount") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Button(onClick = { imagePickerLauncher.launch("image/*") }) {
-            Text("Pick Image")
-        }
-
-        imageUri?.let {
-            AsyncImage(model = it, contentDescription = null, modifier = Modifier.fillMaxWidth())
-        }
-
-        Spacer(modifier = Modifier.weight(1f)) // This pushes the button to the bottom
-
-        Button(
-            onClick = {
-                if (name.isNotBlank() && amount.isNotBlank()) {
-                    itemList[itemIndex] = Grocery(name, amount.toInt(), imageUri.toString())
-                    navController.popBackStack()
-                }
-            },
-            modifier = Modifier.align(Alignment.End)
-        ) {
-            Text("Save")
-        }
-    }
+    GroceryForm(
+        initialName = grocery.name,
+        initialAmount = grocery.amount.toString(),
+        initialImageUri = Uri.parse(grocery.imageUri),
+        onSubmit = { name, amount, imageUri ->
+            itemList[itemIndex] = Grocery(name, amount.toInt(), imageUri?.toString())
+            navController.popBackStack()
+        },
+        onImagePicked = { imageUri -> }
+    )
 }
