@@ -29,43 +29,65 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateListOf
+import kotlinx.coroutines.launch
 
 data class Grocery(val name: String, val amount: Int, val imageUri: String?)
 class MainActivity : ComponentActivity() {
+
+    private lateinit var groceryDataStore: GroceryDataStore
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        groceryDataStore = GroceryDataStore(this)
+
         setContent {
             MAD_Assignment2Theme {
                 val navController = rememberNavController()
                 val itemList = remember { mutableStateListOf<Grocery>() }
-                AppNavHost(navController = navController, itemList = itemList)
+
+                // Observe groceryFlow and update itemList
+                LaunchedEffect(Unit) {
+                    groceryDataStore.groceryFlow.collect { groceries ->
+                        itemList.clear()
+                        itemList.addAll(groceries)
+                    }
+                }
+
+                AppNavHost(navController = navController, itemList = itemList, groceryDataStore)
             }
         }
     }
 }
-
 //main controller. NavHost for both views.
 
 @Composable
-fun AppNavHost(navController: NavHostController, itemList: MutableList<Grocery>) {
+fun AppNavHost(
+    navController: NavHostController,
+    itemList: MutableList<Grocery>,
+    groceryDataStore: GroceryDataStore
+) {
     NavHost(navController = navController, startDestination = "main_screen") {
         composable("main_screen") {
-            MainScreen(navController = navController, itemList = itemList)
+            MainScreen(navController = navController, itemList = itemList, groceryDataStore)
         }
         composable("add_item_screen") {
-            AddItemScreen(navController = navController, itemList = itemList)
+            AddItemScreen(navController = navController, itemList = itemList, groceryDataStore)
         }
         composable("edit_item_screen/{itemIndex}") { backStackEntry ->
             val itemIndex = backStackEntry.arguments?.getString("itemIndex")?.toInt() ?: 0
-            EditItemScreen(navController = navController, itemList = itemList, itemIndex = itemIndex)
+            EditItemScreen(navController = navController, itemList = itemList, itemIndex = itemIndex, groceryDataStore)
         }
     }
 }
 @Composable
-
-//view 1. Items Displayed in a list.
-
-fun MainScreen(navController: NavHostController, itemList: MutableList<Grocery>) {
+fun MainScreen(
+    navController: NavHostController,
+    itemList: MutableList<Grocery>,
+    groceryDataStore: GroceryDataStore
+) {
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(onClick = { navController.navigate("add_item_screen") }) {
@@ -118,6 +140,8 @@ fun MainScreen(navController: NavHostController, itemList: MutableList<Grocery>)
                         Button(
                             onClick = {
                                 itemList.removeAt(index)
+                                // If you need to persist changes to DataStore, do it here
+                                // using groceryDataStore.saveGroceries(itemList)
                             },
                             modifier = Modifier.padding(start = 8.dp)
                         ) {
@@ -131,10 +155,7 @@ fun MainScreen(navController: NavHostController, itemList: MutableList<Grocery>)
 }
 
 @Composable
-
-//View 2. Adding to list
-
-fun AddItemScreen(navController: NavHostController, itemList: MutableList<Grocery>) {
+fun AddItemScreen(navController: NavHostController, itemList: MutableList<Grocery>, groceryDataStore: GroceryDataStore) {
     var name by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     var imageUri by remember { mutableStateOf<Uri?>(null) }
@@ -144,6 +165,9 @@ fun AddItemScreen(navController: NavHostController, itemList: MutableList<Grocer
     ) { uri: Uri? ->
         imageUri = uri
     }
+
+    // Get a coroutine scope that can be used to launch coroutines
+    val coroutineScope = rememberCoroutineScope()
 
     Column(modifier = Modifier.padding(16.dp)) {
         TextField(
@@ -175,6 +199,12 @@ fun AddItemScreen(navController: NavHostController, itemList: MutableList<Grocer
             onClick = {
                 if (name.isNotBlank() && amount.isNotBlank()) {
                     itemList.add(Grocery(name, amount.toInt(), imageUri.toString()))
+
+                    // Launch a coroutine in the composable scope to save the groceries
+                    coroutineScope.launch {
+                        groceryDataStore.saveGroceries(itemList)
+                    }
+
                     navController.popBackStack()
                 }
             },
@@ -185,10 +215,13 @@ fun AddItemScreen(navController: NavHostController, itemList: MutableList<Grocer
     }
 }
 
-
-//view 3, editing item
 @Composable
-fun EditItemScreen(navController: NavHostController, itemList: MutableList<Grocery>, itemIndex: Int) {
+fun EditItemScreen(
+    navController: NavHostController,
+    itemList: MutableList<Grocery>,
+    itemIndex: Int,
+    groceryDataStore: GroceryDataStore
+) {
     var name by remember { mutableStateOf(itemList[itemIndex].name) }
     var amount by remember { mutableStateOf(itemList[itemIndex].amount.toString()) }
     var imageUri by remember { mutableStateOf<Uri?>(Uri.parse(itemList[itemIndex].imageUri)) }
@@ -199,11 +232,14 @@ fun EditItemScreen(navController: NavHostController, itemList: MutableList<Groce
         imageUri = uri
     }
 
-    Column(modifier = Modifier
-        .padding(16.dp)
-        .fillMaxSize()
+    // Get a coroutine scope that can be used to launch coroutines
+    val coroutineScope = rememberCoroutineScope()
+
+    Column(
+        modifier = Modifier
+            .padding(16.dp)
+            .fillMaxSize()
     ) {
-        // Content goes here
         TextField(
             value = name,
             onValueChange = { name = it },
@@ -227,12 +263,18 @@ fun EditItemScreen(navController: NavHostController, itemList: MutableList<Groce
             AsyncImage(model = it, contentDescription = null, modifier = Modifier.fillMaxWidth())
         }
 
-        Spacer(modifier = Modifier.weight(1f)) // This pushes the button to the bottom
+        Spacer(modifier = Modifier.weight(1f))
 
         Button(
             onClick = {
                 if (name.isNotBlank() && amount.isNotBlank()) {
                     itemList[itemIndex] = Grocery(name, amount.toInt(), imageUri.toString())
+
+                    // Launch a coroutine in the composable scope to save the groceries
+                    coroutineScope.launch {
+                        groceryDataStore.saveGroceries(itemList)
+                    }
+
                     navController.popBackStack()
                 }
             },
