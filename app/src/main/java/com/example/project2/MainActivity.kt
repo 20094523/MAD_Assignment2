@@ -4,19 +4,13 @@ import android.annotation.SuppressLint
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -29,9 +23,13 @@ import coil.compose.AsyncImage
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.background
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.input.KeyboardType
 
 data class Grocery(val name: String, val amount: Int, val imageUri: String?)
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,7 +43,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-
 @SuppressLint("UnrememberedMutableState")
 @Composable
 fun GroceryForm(
@@ -53,7 +50,8 @@ fun GroceryForm(
     initialAmount: String,
     initialImageUri: Uri?,
     onSubmit: (String, String, Uri?) -> Unit,
-    onImagePicked: (Uri?) -> Unit
+    onImagePicked: (Uri?) -> Unit,
+    modifier: Modifier = Modifier // Default value added
 ) {
     var name by remember { mutableStateOf(initialName) }
     var amount by remember { mutableStateOf(initialAmount) }
@@ -70,7 +68,7 @@ fun GroceryForm(
         name.isNotBlank() && amount.isNotBlank() && imageUri != null
     }
 
-    Column(modifier = Modifier.padding(16.dp)) {
+    Column(modifier = modifier.padding(16.dp)) { // Apply modifier here
         TextField(
             value = name,
             onValueChange = { name = it },
@@ -109,29 +107,48 @@ fun GroceryForm(
         }
     }
 }
-//main controller. NavHost for both views.
+
+// Function to get the background color based on orientation
+@Composable
+fun BackgroundColorModifier(content: @Composable (Modifier) -> Unit) {
+    val configuration = LocalConfiguration.current
+    val backgroundColor = when (configuration.orientation) {
+        android.content.res.Configuration.ORIENTATION_LANDSCAPE -> Color.Cyan
+        android.content.res.Configuration.ORIENTATION_PORTRAIT -> Color.Blue
+        else -> Color.White
+    }
+
+    Box(modifier = Modifier.fillMaxSize().background(backgroundColor)) {
+        content(Modifier.fillMaxSize())
+    }
+}
 
 @Composable
 fun AppNavHost(navController: NavHostController, itemList: MutableList<Grocery>) {
     NavHost(navController = navController, startDestination = "main_screen") {
         composable("main_screen") {
-            MainScreen(navController = navController, itemList = itemList)
+            BackgroundColorModifier { modifier ->
+                MainScreen(navController = navController, itemList = itemList, modifier = modifier)
+            }
         }
         composable("add_item_screen") {
-            AddItemScreen(navController = navController, itemList = itemList)
+            BackgroundColorModifier { modifier ->
+                AddItemScreen(navController = navController, itemList = itemList, modifier = modifier)
+            }
         }
         composable("edit_item_screen/{itemIndex}") { backStackEntry ->
             val itemIndex = backStackEntry.arguments?.getString("itemIndex")?.toInt() ?: 0
-            EditItemScreen(navController = navController, itemList = itemList, itemIndex = itemIndex)
+            BackgroundColorModifier { modifier ->
+                EditItemScreen(navController = navController, itemList = itemList, itemIndex = itemIndex, modifier = modifier)
+            }
         }
     }
 }
+
 @Composable
-
-//view 1. Items Displayed in a list.
-
-fun MainScreen(navController: NavHostController, itemList: MutableList<Grocery>) {
+fun MainScreen(navController: NavHostController, itemList: MutableList<Grocery>, modifier: Modifier) {
     Scaffold(
+        modifier = modifier,
         floatingActionButton = {
             FloatingActionButton(onClick = { navController.navigate("add_item_screen") }) {
                 Text("+")
@@ -196,9 +213,7 @@ fun MainScreen(navController: NavHostController, itemList: MutableList<Grocery>)
 }
 
 @Composable
-
-//View 2. Adding to list
-fun AddItemScreen(navController: NavHostController, itemList: MutableList<Grocery>) {
+fun AddItemScreen(navController: NavHostController, itemList: MutableList<Grocery>, modifier: Modifier) {
     GroceryForm(
         initialName = "",
         initialAmount = "",
@@ -207,14 +222,13 @@ fun AddItemScreen(navController: NavHostController, itemList: MutableList<Grocer
             itemList.add(Grocery(name, amount.toInt(), imageUri?.toString()))
             navController.popBackStack()
         },
-        onImagePicked = { imageUri -> }
+        onImagePicked = { imageUri -> },
+        modifier = modifier
     )
 }
 
-
-//view 3, editing item
 @Composable
-fun EditItemScreen(navController: NavHostController, itemList: MutableList<Grocery>, itemIndex: Int) {
+fun EditItemScreen(navController: NavHostController, itemList: MutableList<Grocery>, itemIndex: Int, modifier: Modifier) {
     val grocery = itemList[itemIndex]
 
     GroceryForm(
@@ -225,6 +239,7 @@ fun EditItemScreen(navController: NavHostController, itemList: MutableList<Groce
             itemList[itemIndex] = Grocery(name, amount.toInt(), imageUri?.toString())
             navController.popBackStack()
         },
-        onImagePicked = { imageUri -> }
+        onImagePicked = { imageUri -> },
+        modifier = modifier
     )
 }
