@@ -1,5 +1,4 @@
 package com.example.project2
-
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.DataStoreFactory
@@ -24,6 +23,7 @@ class GroceryDataStore(context: Context) {
             }
         }
 
+    // Save groceries to DataStore
     suspend fun saveGroceries(groceries: List<Grocery>) {
         dataStore.updateData { groceries }
     }
